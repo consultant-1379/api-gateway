@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "eric-eo-api-gateway.name" . }}
+  labels:
+    {{- include "eric-eo-api-gateway.kubernetes-io-info" .| nindent 4 }}
+  annotations:
+        {{- include "eric-eo-api-gateway.helm-annotations" .| nindent 4 }}
+        {{- include "eric-eo-api-gateway.prometheus" .| nindent 4 }}
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app: {{ template "eric-eo-api-gateway.name" . }}

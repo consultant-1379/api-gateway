@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.ericsson.gateway.rate.limit.RateLimitTest
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.644 s - in com.ericsson.gateway.rate.limit.RateLimitTest

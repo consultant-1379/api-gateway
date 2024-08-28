@@ -1,0 +1,32 @@
+{{- if .Values.iam.createIamClient }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ template "eric-eo-api-gateway.name" . }}-iam-client-configmap
+  labels:
+    app: {{ template "eric-eo-api-gateway.name" . }}
+    {{- include "eric-eo-api-gateway.kubernetes-io-info" .| nindent 4 }}
+  annotations:
+    {{- include "eric-eo-api-gateway.helm-annotations" .| nindent 4 }}
+data:
+  client-configuration.json: |
+    {
+      "clientId": "{{ .Values.global.iam.clientId }}",
+      "authorizationServicesEnabled": "true",
+      "implicitFlowEnabled": "true",
+      "directAccessGrantsEnabled": "true",
+      "serviceAccountsEnabled": "true",
+      "secret": "this value can be overriden by env var named CLIENT_SECRET defined in hook",
+      "redirectUris": [
+               {{- $local := dict "first" true }}
+                 {{- range $k, $v := .Values.global.hosts }}
+                   {{- if $v }}
+                     {{- if not (contains "ericsson.example.com" $v) }}
+                       {{- if not $local.first -}},{{- end }}
+                       {{ if $v }}"https://{{ $v }}/*"{{ $_ := set $local "first" false }}{{ end }}
+                     {{- end }}
+                   {{- end }}
+                 {{- end }}
+              ]
+    }
+{{- end }}

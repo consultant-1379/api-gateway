@@ -1,0 +1,464 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "eric-eo-api-gateway.name" . }}
+  labels:
+    app: {{ template "eric-eo-api-gateway.name" . }}
+    {{- include "eric-eo-api-gateway.kubernetes-io-info" .| nindent 4 }}
+  annotations:
+    {{- include "eric-eo-api-gateway.helm-annotations" .| nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy:
+    type: {{ .Values.updateStrategy.type }}
+      {{- if and (eq .Values.updateStrategy.type "RollingUpdate") .Values.updateStrategy.rollingUpdate }}
+    rollingUpdate:
+{{ toYaml .Values.updateStrategy.rollingUpdate | trim | indent 6 }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "eric-eo-api-gateway.name" . }}
+  template:
+    metadata:
+      annotations:
+            {{- include "eric-eo-api-gateway.helm-annotations" .| nindent 8 }}
+            {{- include "eric-eo-api-gateway.prometheus" .| nindent 8 }}
+      labels:
+        app: {{ template "eric-eo-api-gateway.name" . }}
+      {{- include "eric-eo-api-gateway.kubernetes-io-info" .| nindent 8 }}
+    spec:
+      {{- if  .Values.imageCredentials.registry.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.registry.pullSecret | quote }}
+      {{- else if .Values.global.registry.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.registry.pullSecret | quote }}
+      {{- end }}
+      restartPolicy: Always
+      serviceAccountName: {{ template "eric-eo-api-gateway.name" . }}-sa
+      containers:
+      - image: "{{ template "eric-eo-api-gateway.registryUrl" . }}/{{ .Values.imageCredentials.repoPath }}/{{ index .Values "images" "eric-eo-api-gateway" "name" }}:{{ index .Values "images" "eric-eo-api-gateway" "tag" }}"
+        imagePullPolicy: {{ .Values.imageCredentials.pullPolicy | quote }}
+        name: {{ .Chart.Name }}
+        ports:
+        - name: http-api
+          containerPort: 8080
+        env:
+          {{- if (not .Values.logging.format.json) }}
+        - name: LOGBACK_CONFIG_FILE
+          value: "classpath:custom-logback-plain-text.xml"
+          {{- end }}
+        - name: SERVICE_ID
+          value: {{ .Chart.Name }}
+        - name: IAM_URL
+          value: "https://{{ required "A valid .Values.global.hosts.iam entry required" .Values.global.hosts.iam }}{{ .Values.iam.issuerPath }}"
+        - name: SO_HOST
+          value: {{ .Values.global.hosts.so }}
+        - name: SDD_HOST
+          value: {{ .Values.global.hosts.sdd }}
+        - name: UDS_HOST
+          value: {{ .Values.global.hosts.uds }}
+        - name: GR_HOST
+          value: {{ .Values.global.hosts.gr }}
+        - name: UDS_APX_CONTEXT_PATH
+          value: {{ .Values.uds.apx.context }}
+        - name: UDS_APX_SERVICE_PATH
+          value: {{ .Values.uds.apx.service }} 
+        - name: UDS_APX_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.uds.apx.rateLimit.maxAccess | quote }}
+        - name: UDS_APX_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.uds.apx.rateLimit.resetTime | quote }}                 
+        - name: UDS_ARTIFACT_CONTEXT_PATH
+          value: {{ .Values.uds.artifact.context }}
+        - name: UDS_ARTIFACT_SERVICE_PATH
+          value: {{ .Values.uds.artifact.service }}
+        - name: UDS_ARTIFACT_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.uds.artifact.rateLimit.maxAccess | quote }}
+        - name: UDS_ARTIFACT_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.uds.artifact.rateLimit.resetTime | quote }}
+        - name: WANO_HOST
+          value: {{ .Values.global.hosts.wano }}
+        - name: VNFM_HOST
+          value: {{ .Values.global.hosts.vnfm }}
+        - name: POLICY_HOST
+          value: {{ .Values.global.hosts.pf }}
+        - name: CLIENT_ID
+          value: {{ .Values.global.iam.clientId }}
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.iam.kubernetesSecret | quote }}
+              key: {{ .Values.iam.secretKey | quote }}
+        - name: SO_GUI_CONTEXT_PATH
+          value: {{ .Values.so.gui.context }}
+        - name: SO_GUI_SERVICE_PATH
+          value: {{ .Values.so.gui.service }}
+        - name: SO_GUI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.gui.rateLimit.maxAccess | quote }}
+        - name: SO_GUI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.gui.rateLimit.resetTime | quote }}
+        - name: SO_ONBOARDING_CONTEXT_PATH
+          value: {{ .Values.so.onboarding.context }}
+        - name: SO_ONBOARDING_SERVICE_PATH
+          value: {{ .Values.so.onboarding.service }}
+        - name: SO_ONBOARDING_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.onboarding.rateLimit.maxAccess | quote }}
+        - name: SO_ONBOARDING_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.onboarding.rateLimit.resetTime | quote }}
+        - name: SO_ENGINE_CONTEXT_PATH
+          value: {{ .Values.so.engine.context  }}
+        - name: SO_ENGINE_SERVICE_PATH
+          value: {{ .Values.so.engine.service }}
+        - name: SO_ENGINE_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.engine.rateLimit.maxAccess | quote }}
+        - name: SO_ENGINE_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.engine.rateLimit.resetTime | quote }}
+        - name: SO_TOPOLOGY_CONTEXT_PATH
+          value: {{  .Values.so.topology.context  }}
+        - name: SO_TOPOLOGY_SERVICE_PATH
+          value: {{ .Values.so.topology.service }}
+        - name: SO_TOPOLOGY_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.topology.rateLimit.maxAccess | quote }}
+        - name: SO_TOPOLOGY_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.topology.rateLimit.resetTime | quote }}
+        - name: SO_TOPOLOGY_SYNC_SERVICE_CONTEXT_PATH
+          value: {{  .Values.so.topologysynchronisation.context  }}
+        - name: SO_TOPOLOGY_SYNC_SERVICE_PATH
+          value: {{ .Values.so.topologysynchronisation.service }}
+        - name: SO_TOPOLOGY_SYNC_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.topologysynchronisation.rateLimit.maxAccess | quote }}
+        - name: SO_TOPOLOGY_SYNC_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.topologysynchronisation.rateLimit.resetTime | quote }}
+        - name: SO_METRIC_CONTEXT_PATH
+          value: {{ .Values.so.metric.context }}
+        - name: SO_METRIC_SERVICE_PATH
+          value: {{ .Values.so.metric.service }}
+        - name: SO_ORCHESTRATIONCOCKPIT_CONTEXT_PATH
+          value: {{ .Values.so.orchestrationcockpit.context  }}
+        - name: SO_ORCHESTRATIONCOCKPIT_SERVICE_PATH
+          value: {{ .Values.so.orchestrationcockpit.service }}
+        - name: SO_COCKPIT_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.orchestrationcockpit.rateLimit.maxAccess | quote }}
+        - name: SO_COCKPIT_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.orchestrationcockpit.rateLimit.resetTime | quote }}
+        - name: SO_ORCHESTRATION_CONTEXT_PATH
+          value: {{ .Values.so.engine.context  }}
+        - name: SO_ORCHESTRATION_SERVICE_PATH
+          value: {{ .Values.so.engine.service }}
+        - name: SO_CATALOG_MANAGER_CONTEXT_PATH
+          value: {{ .Values.so.catalogmanager.context  }}
+        - name: SO_CATALOG_MANAGER_SERVICE_PATH
+          value: {{ .Values.so.catalogmanager.service }}
+        - name: SO_CATALOG_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.catalogmanager.rateLimit.maxAccess | quote }}
+        - name: SO_CATALOG_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.catalogmanager.rateLimit.resetTime | quote }}
+        - name: SO_DASHBOARD_CONTEXT_PATH
+          value: {{ .Values.so.dashboard.context }}
+        - name: SO_DASHBOARD_SERVICE_PATH
+          value: {{ .Values.so.dashboard.service }}
+        - name: SO_DASHBOARD_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.dashboard.rateLimit.maxAccess | quote }}
+        - name: SO_DASHBOARD_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.dashboard.rateLimit.resetTime | quote }}
+        - name: SO_SUBSYSTEMMANAGER_CONTEXT_PATH
+          value: {{  .Values.so.subsystemsmanager.context }}
+        - name: SO_SUBSYSTEMMANAGER_SERVICE_PATH
+          value: {{ .Values.so.subsystemsmanager.service }}
+        - name: SO_SUBSYSTEMMANAGER_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.subsystemsmanager.rateLimit.maxAccess | quote }}
+        - name: SO_SUBSYSTEMMANAGER_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.subsystemsmanager.rateLimit.resetTime | quote }}
+        - name: SO_SUBSYSTEMMANAGEMENT_CONTEXT_PATH
+          value: {{  .Values.so.subsystemsmanagement.context }}
+        - name: SO_SUBSYSTEMMANAGEMENT_SERVICE_PATH
+          value: {{ .Values.so.subsystemsmanagement.service }}
+        - name: SO_SUBSYSTEMMANAGEMENT_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.subsystemsmanagement.rateLimit.maxAccess | quote }}
+        - name: SO_SUBSYSTEMMANAGEMENT_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.subsystemsmanagement.rateLimit.resetTime | quote }}
+        - name: SUBSYSTEMSMGMT_UI_CONTEXT_PATH
+          value: {{ .Values.subsystemsmgmt.ui.context }}
+        - name: SUBSYSTEMSMGMT_UI_SERVICE_PATH
+          value: {{ .Values.subsystemsmgmt.ui.service }}
+        - name: SO_SUBSYSTEMSMGMT_UI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.subsystemsmgmt.ui.rateLimit.maxAccess | quote }}
+        - name: SO_SUBSYSTEMSMGMT_UI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.subsystemsmgmt.ui.rateLimit.resetTime | quote }}
+        - name: SO_IPMANAGER_CONTEXT_PATH_DEPRECATED
+          value: {{ .Values.so.ipmanager.depricatedcontext }}
+        - name: SO_IPMANAGER_CONTEXT_PATH
+          value: {{ .Values.so.ipmanager.context }}
+        - name: SO_IPMANAGER_SERVICE_PATH
+          value: {{ .Values.so.ipmanager.service }}
+        - name: SO_IPMANAGER_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.so.ipmanager.rateLimit.maxAccess | quote }}
+        - name: SO_IPMANAGER_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.so.ipmanager.rateLimit.resetTime | quote }}
+        - name: SO_IPAM_UI_CONTEXT_PATH
+          value: {{ .Values.ipam.ui.context }}
+        - name: SO_IPAM_UI_SERVICE_PATH
+          value: {{ .Values.ipam.ui.service }}
+        - name: SO_IPAM_UI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.ipam.ui.rateLimit.maxAccess | quote }}
+        - name: SO_IPAM_UI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.ipam.ui.rateLimit.resetTime | quote }}
+# TODO(eankinn) should be the same value as SERVER_BASEPATH in eric-data-visualizer-kb helm chart
+        - name: LOG_VISUALIZER_CONTEXT_PATH
+          value: {{ .Values.logs.visualizer.context }}
+# Path to branding service. Can be any value
+        - name: LOG_VISUALIZER_BRANDING_CONTEXT_PATH
+          value: {{ .Values.logs.visualizer.branding.context }}
+# Use to remove branding prefix. Use to remove prefix in redirection request. Example: if original path /logs/css/index.css -> it should be /css/index.css, so this value should be 1
+        - name: LOG_VISUALIZER_BRANDING_CONTEXT_PATH_REMOVE
+          value: {{ .Values.logs.visualizer.branding.removePath | quote }}
+        - name: LOG_VISUALIZER_SERVICE_PATH
+          value: {{ .Values.logs.visualizer.service }}
+        - name: LOG_VISUALIZER_ROUTE_ORDER
+          value: {{ .Values.logs.visualizer.routeOrder | quote }}
+        - name: GR_ORCHESTRATOR_CONTEXT_PATH
+          value: {{ .Values.gr.orchestrator.context }}
+        - name: GR_ORCHESTRATOR_SERVICE_PATH
+          value: {{ .Values.gr.orchestrator.service }}
+        - name: GR_ORCHESTRATOR_LIMIT_MAX_ACCESS
+          value: {{ .Values.gr.orchestrator.rateLimit.maxAccess | quote }}
+        - name: GR_ORCHESTRATOR_LIMIT_RESET_TIME
+          value: {{ .Values.gr.orchestrator.rateLimit.resetTime | quote }}
+        - name: BRO_CONTEXT_PATH
+          value: {{ .Values.bro.context }}
+        - name: BRO_SERVICE_PATH
+          value: {{ .Values.bro.service }}
+        - name: BRO_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.bro.rateLimit.maxAccess | quote }}
+        - name: BRO_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.bro.rateLimit.resetTime | quote }}
+        - name: IAM_TOKEN_CONTEXT_PATH
+          value: {{ .Values.iam.token.context }}
+        - name: USERMGMT_UI_CONTEXT_PATH
+          value: {{ .Values.usermgmt.ui.context  }}
+        - name: USERMGMT_UI_SERVICE_PATH
+          value: {{ .Values.usermgmt.ui.service }}
+        - name: USERMGMT_UI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.usermgmt.ui.rateLimit.maxAccess | quote }}
+        - name: USERMGMT_UI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.usermgmt.ui.rateLimit.resetTime | quote }}
+        - name: USERMGMT_SERVICE_CONTEXT_PATH
+          value: {{ .Values.usermgmt.service.context  }}
+        - name: USERMGMT_SERVICE_PATH
+          value: {{ .Values.usermgmt.service.service }}
+        - name: USERMGMT_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.usermgmt.service.rateLimit.maxAccess | quote }}
+        - name: USERMGMT_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.usermgmt.service.rateLimit.resetTime | quote }}
+        - name: TENANTMGMT_SERVICE_CONTEXT_PATH
+          value: {{ .Values.tenantmgmt.service.context  }}
+        - name: TENANTMGMT_SERVICE_PATH
+          value: {{ .Values.tenantmgmt.service.service }}
+        - name: TENANTMGMT_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.tenantmgmt.service.rateLimit.maxAccess | quote }}
+        - name: TENANTMGMT_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.tenantmgmt.service.rateLimit.resetTime | quote }}
+        - name: JAVA_OPTS
+          value: "-Xms{{ .Values.jvm.heap.min }} -Xmx{{ .Values.jvm.heap.max }} -Dreactor.netty.ioWorkerCount=50 -Dreactor.netty.http.server.accessLogEnabled=true -Dhazelcast.prefer.ipv4.stack=false"
+        - name: CACERT_PATH
+          value: /cacerts
+        - name: CACERT_NAME
+          value: {{ .Values.global.iam.cacert.filePath }}
+        - name: WANO_GUI_CONTEXT_PATH
+          value: {{ .Values.wano.gui.context }}
+        - name: WANO_GUI_SERVICE_PATH
+          value: {{ .Values.wano.gui.service }}
+        - name: WANO_GUI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.wano.gui.rateLimit.maxAccess | quote }}
+        - name: WANO_GUI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.wano.gui.rateLimit.resetTime | quote }}
+        - name: WANO_NBI_CONTEXT_PATH
+          value: {{ .Values.wano.nbi.context }}
+        - name: WANO_NBI_SERVICE_PATH
+          value: {{ .Values.wano.nbi.service }}
+        - name: WANO_NBI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.wano.nbi.rateLimit.maxAccess | quote }}
+        - name: WANO_NBI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.wano.nbi.rateLimit.resetTime | quote }}
+        - name: VNFM_GUI_CONTEXT_PATH
+          value: {{ .Values.vnfm.gui.context }}
+        - name: VNFM_GUI_SERVICE_PATH
+          value: {{ .Values.vnfm.gui.service }}
+        - name: VNFM_GUI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.vnfm.gui.rateLimit.maxAccess | quote }}
+        - name: VNFM_GUI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.vnfm.gui.rateLimit.resetTime | quote }}
+        - name: VNFM_ONBOARDING_CONTEXT_PATH
+          value: {{ .Values.vnfm.onboarding.context }}
+        - name: VNFM_ONBOARDING_SERVICE_PATH
+          value: {{ .Values.vnfm.onboarding.service }}
+        - name: VNFM_ONBOARDING_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.vnfm.onboarding.rateLimit.maxAccess | quote }}
+        - name: VNFM_ONBOARDING_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.vnfm.onboarding.rateLimit.resetTime | quote }}
+        - name: VNFM_WFS_CONTEXT_PATH
+          value: {{ .Values.vnfm.wfs.context }}
+        - name: VNFM_WFS_SERVICE_PATH
+          value: {{ .Values.vnfm.wfs.service }}
+        - name: VNFM_NBI_CONTEXT_PATH
+          value: {{ .Values.vnfm.nbi.context }}
+        - name: VNFM_NBI_SERVICE_PATH
+          value: {{ .Values.vnfm.nbi.service }}
+        - name: VNFM_NBI_RATE_LIMIT_MAX_ACCESSS
+          value: {{ .Values.vnfm.nbi.rateLimit.maxAccess | quote }}
+        - name: VNFM_NBI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.vnfm.nbi.rateLimit.resetTime | quote }}
+        - name: METRIC_CONTEXT_PATH
+          value: {{ .Values.metric.context }}
+        - name: METRIC_SERVICE_PATH
+          value: {{ .Values.metric.service }}
+        - name: METRIC_ROUTE_ORDER
+          value: {{ .Values.metric.routeOrder | quote }}
+        - name: TZ
+          value: {{ .Values.global.timezone }}
+        - name: SESSION_TIMEOUT
+          value:  {{ .Values.session.timeout | quote }}
+        - name: VNFLCM_GUI_CONTEXT_PATH
+          value: {{ .Values.vnflcm.gui.context }}
+        - name: VNFLCM_GUI_SERVICE_PATH
+          value: {{ .Values.vnflcm.gui.service }}
+        - name: VNFLCM_GUI_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.vnflcm.gui.rateLimit.maxAccess | quote }}
+        - name: VNFLCM_GUI_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.vnflcm.gui.rateLimit.resetTime | quote }}
+        - name: VNFLCM_VEVNFMEM_CONTEXT_PATH
+          value: {{ .Values.vnflcm.vevnfmem.context }}
+        - name: VNFLCM_VEVNFMEM_SERVICE_PATH
+          value: {{ .Values.vnflcm.vevnfmem.service }}
+        - name: VNFLCM_VEVNFMEM_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.vnflcm.vevnfmem.rateLimit.maxAccess | quote }}
+        - name: VNFLCM_VEVNFMEM_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.vnflcm.vevnfmem.rateLimit.resetTime | quote }}
+        - name: APEX_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.apex.context }}
+        - name: APEX_SERVICE_PATH
+          value: {{ .Values.policy.apex.service }}
+        - name: APEX_SERICE_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.apex.rateLimit.maxAccess | quote }}
+        - name: APEX_SERVICE_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.apex.rateLimit.resetTime | quote }}  
+        - name: POLICY_API_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.policyapi.context }}
+        - name: POLICY_API_SERVICE_PATH
+          value: {{ .Values.policy.policyapi.service }}
+        - name: POLICY_API_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.policyapi.rateLimit.maxAccess | quote }}
+        - name: POLICY_API_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.policyapi.rateLimit.resetTime | quote }}  
+        - name: POLICY_PF_PAP_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.policypap.context }}
+        - name: POLICY_PF_PAP_SERVICE_PATH
+          value: {{ .Values.policy.policypap.service }}
+        - name: POLICY_PF_PAP_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.policypap.rateLimit.maxAccess | quote }}
+        - name: POLICY_PF_PAP_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.policypap.rateLimit.resetTime | quote }}    
+        - name: POLICY_PF_XACML_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.policyxacml.context }}
+        - name: POLICY_PF_XACML_SERVICE_PATH
+          value: {{ .Values.policy.policyxacml.service }}
+        - name: POLICY_PF_XACML_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.policyxacml.rateLimit.maxAccess | quote }}
+        - name: POLICY_PF_XACML_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.policyxacml.rateLimit.resetTime | quote }}   
+        - name: POLICY_PF_DROOLS_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.policydrools.context }}
+        - name: POLICY_PF_DROOLS_SERVICE_PATH
+          value: {{ .Values.policy.policydrools.service }}
+        - name: POLICY_PF_DROOLS_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.policydrools.rateLimit.maxAccess | quote }}
+        - name: POLICY_PF_DROOLS_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.policydrools.rateLimit.resetTime | quote }}   
+        - name: POLICY_PF_DIST_SERVICE_CONTEXT_PATH
+          value: {{ .Values.policy.policydist.context }}
+        - name: POLICY_PF_DIST_SERVICE_PATH
+          value: {{ .Values.policy.policydist.service }}
+        - name: POLICY_PF_DIST_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.policy.policydist.rateLimit.maxAccess | quote }}
+        - name: POLICY_PF_DIST_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.policy.policydist.rateLimit.resetTime | quote }}  
+        - name: DMAAP_SERVICE_CONTEXT_PATH
+          value: {{ .Values.dmaap.context }}
+        - name: DMAAP_SERVICE_PATH
+          value: {{ .Values.dmaap.service }}
+        - name: DMAAP_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.dmaap.rateLimit.maxAccess | quote }}
+        - name: DMAAP_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.dmaap.rateLimit.resetTime | quote }}
+        - name: ECM_SERVICE_CONTEXT_PATH
+          value: {{ .Values.ecm.service.context }}
+        - name: ECM_SERVICE_PATH
+          value: {{ .Values.ecm.service.path }}
+        - name: CLOUD_MGR_GUI_CONTEXT_PATH
+          value: {{ .Values.cloud.mgr.gui.context }}
+        - name: CLOUD_MGR_GUI_PATH
+          value: {{ .Values.cloud.mgr.gui.path }}
+        - name: OPEN_AM_SERVICE_CONTEXT_PATH
+          value: {{ .Values.open.am.context }}
+        - name: OPEN_AM_SERVICE_PATH
+          value: {{ .Values.open.am.service }}
+        - name: CRYPTO_CONTEXT_PATH
+          value: {{ .Values.crypto.context }}
+        - name: CRYPTO_SERVICE_PATH
+          value: {{ .Values.crypto.service }}
+        - name: CRYPTO_RATE_LIMIT_MAX_ACCESS
+          value: {{ .Values.crypto.rateLimit.maxAccess | quote }}
+        - name: CRYPTO_RATE_LIMIT_RESET_TIME
+          value: {{ .Values.crypto.rateLimit.resetTime | quote }}
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+        resources:
+          {{ toYaml .Values.resources | indent 10 | trim }}
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: {{ .Values.probe.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probe.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probe.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probe.liveness.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: {{ .Values.probe.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probe.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probe.readiness.timeoutSeconds }}
+        volumeMounts:
+          - name: cacerts
+            mountPath: /cacerts
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector }}
+      {{- else if .Values.global.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.global.nodeSelector }}
+      {{- end }}
+      volumes:
+      - name: cacerts
+        secret:
+          secretName: {{ .Values.global.iam.cacert.secretName }}
+          items:
+          - key: {{ .Values.global.iam.cacert.key }}
+            path: {{ .Values.global.iam.cacert.filePath }}
+      initContainers:
+      - name: init-{{ .Chart.Name }}
+        image: "{{ template "eric-eo-api-gateway.registryUrl" . }}/{{ .Values.imageCredentials.repoPath }}/{{ index .Values "images" "init" "name" }}:{{ index .Values "images" "init" "tag" }}"
+        imagePullPolicy: {{ .Values.imageCredentials.pullPolicy | quote }}
+        command: ['sh', '-c', 'if [ "$(curl -k -s -o /dev/null -w "%{http_code}" https://{{ .Values.global.hosts.iam }}{{ .Values.iam.issuerPath}}/.well-known/openid-configuration)" != "200" ]; then echo waiting on keycloak && exit 1; fi;']
+        env:
+          - name: TZ
+            value: {{ .Values.global.timezone }}
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsNonRoot: false
+          runAsUser: 0
+

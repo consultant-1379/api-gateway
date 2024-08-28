@@ -1,0 +1,82 @@
+{{- if .Values.iam.createIamClient }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "eric-eo-api-gateway.name" . }}-create-iam-client-hook
+  labels:
+    app: {{ .Chart.Name }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  backoffLimit: 8
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      {{- if  .Values.imageCredentials.registry.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imageCredentials.registry.pullSecret | quote }}
+      {{- else if .Values.global.registry.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.global.registry.pullSecret | quote }}
+      {{- end }}
+      restartPolicy: Never
+      serviceAccountName: {{ template "eric-eo-api-gateway.name" . }}-sa
+      containers:
+        - name: keycloak-client
+          image: "{{ template "eric-eo-api-gateway.registryUrl" . }}/{{ .Values.imageCredentials.repoPath }}/{{ .Values.images.keycloakClient.name }}:{{ .Values.images.keycloakClient.tag }}"
+          imagePullPolicy: {{ .Values.imageCredentials.pullPolicy | quote }}
+          env:
+          - name: CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.iam.kubernetesSecret | quote }}
+                key: {{ .Values.iam.secretKey | quote }}
+          - name: IAM_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.iam.adminSecret | quote }}
+                key: {{ .Values.global.iam.userKey | quote }}
+          - name: IAM_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.global.iam.adminSecret | quote }}
+                key: {{ .Values.global.iam.passwordKey | quote }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            runAsNonRoot: false
+            runAsUser: 0
+          args:
+          - "create"
+          - "client"
+          - "--keycloak_hostname={{ .Values.global.hosts.iam }}"
+          - "--keycloak_user=$(IAM_ADMIN_USER)"
+          - "--keycloak_password=$(IAM_ADMIN_PASSWORD)"
+          - "--config=/config/client-configuration.json"
+          volumeMounts:
+          - name: create-iam-client-volume
+            mountPath: /config
+          - name: create-cacert-volume
+            mountPath: /mnt/certs
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.nodeSelector }}
+      {{- else if .Values.global.nodeSelector }}
+      nodeSelector:
+        {{ toYaml .Values.global.nodeSelector }}
+      {{- end }}
+      volumes:
+      - name: create-iam-client-volume
+        configMap:
+          name: {{ .Chart.Name }}-iam-client-configmap
+          defaultMode: 0777
+      - name: create-cacert-volume
+        secret:
+          secretName: {{ .Values.global.iam.cacert.secretName }}
+          items:
+            - key: {{ .Values.global.iam.cacert.key }}
+              path: {{ .Values.global.iam.cacert.filePath }}
+{{- end }}
